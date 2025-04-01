@@ -52,13 +52,17 @@ class PixelCNNLayer_down(nn.Module):
 
 class PixelCNN(nn.Module):
     def __init__(self, nr_resnet=5, nr_filters=80, nr_logistic_mix=10,
-                    resnet_nonlinearity='concat_elu', input_channels=3):
+                    resnet_nonlinearity='concat_elu', input_channels=3, num_classes=None):
         super(PixelCNN, self).__init__()
         if resnet_nonlinearity == 'concat_elu' :
             self.resnet_nonlinearity = lambda x : concat_elu(x)
         else :
             raise Exception('right now only concat elu is supported as resnet nonlinearity.')
 
+        # New!
+        if num_classes is not None:
+            self.embedding = nn.Embedding(num_classes, input_channels)
+        
         self.nr_filters = nr_filters
         self.input_channels = input_channels
         self.nr_logistic_mix = nr_logistic_mix
@@ -97,7 +101,18 @@ class PixelCNN(nn.Module):
         self.init_padding = None
 
 
-    def forward(self, x, sample=False):
+    def forward(self, x, sample=False, class_cond = None):
+        # New: Incorporate conditional information if provided
+        if class_cond is not None:
+            # Convert one-hot vector to class indices
+            class_idx = class_cond.argmax(dim=1)
+            # Get the embedding for current class; shape: (batch, input_channels)
+            emb = self.embedding(class_idx)
+            # Reshape to (batch, input_channels, 1, 1) for broadcasting
+            emb = emb.unsqueeze(2).unsqueeze(3)
+            # Add embedding to input x; now x incorporates conditioning
+            x = x + emb
+        
         # similar as done in the tf repo :
         if self.init_padding is not sample:
             xs = [int(y) for y in x.size()]

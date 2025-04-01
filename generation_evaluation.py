@@ -22,15 +22,51 @@ import argparse
 # You should modify this sample function to get the generated images from your model
 # You should save the generated images to the gen_data_dir, which is fixed as 'samples'
 sample_op = lambda x : sample_from_discretized_mix_logistic(x, 5)
-def my_sample(model, gen_data_dir, sample_batch_size = 25, obs = (3,32,32), sample_op = sample_op):
+# def my_sample(model, gen_data_dir, sample_batch_size = 25, obs = (3,32,32), sample_op = sample_op):
+#     for label in my_bidict:
+#         print(f"Label: {label}")
+#         #generate images for each label, each label has 25 images
+#         sample_t = sample(model, sample_batch_size, obs, sample_op)
+#         sample_t = rescaling_inv(sample_t)
+#         save_images(sample_t, os.path.join(gen_data_dir), label=label)
+#     pass
+# # End of your code
+
+def my_sample(
+    model, gen_data_dir, sample_batch_size=25, obs=(3, 32, 32), sample_op=sample_op
+):
+    """
+    Generate and save images for each class using the PixelCNN+ model.
+
+    Args:
+        model: The trained PixelCNN+ model
+        gen_data_dir: Directory to save generated images
+        sample_batch_size: Number of images to generate per class
+        obs: Observation shape (channels, height, width)
+        sample_op: Sampling operation for the model
+    """
+    # Make sure directory exists
+    os.makedirs(gen_data_dir, exist_ok=True)
+
     for label in my_bidict:
-        print(f"Label: {label}")
-        #generate images for each label, each label has 25 images
-        sample_t = sample(model, sample_batch_size, obs, sample_op)
+        print(f"Generating {sample_batch_size} images for label: {label}")
+        
+        # Assume my_bidict[label] returns the class index
+        class_index = my_bidict[label]  
+        class_cond = torch.zeros(sample_batch_size, len(my_bidict)).to(device)
+        class_cond[:, class_index] = 1
+
+        # Generate samples
+        # sample function doesn't use label information directly
+        # So we calling it as is and assign labels during saving
+        sample_t = sample(model, sample_batch_size, obs, sample_op, class_cond = class_cond)
+
+        # Rescale the samples from [-1, 1] to [0, 1] range
         sample_t = rescaling_inv(sample_t)
-        save_images(sample_t, os.path.join(gen_data_dir), label=label)
-    pass
-# End of your code
+
+        # Save the generated images with the current label
+        save_images(sample_t, gen_data_dir, label=label)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
