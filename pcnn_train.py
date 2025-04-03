@@ -27,9 +27,6 @@ def train_or_test(
 
     for batch_idx, (model_input, labels) in enumerate(tqdm(data_loader)):
         model_input = model_input.to(device)
-        labels = [
-            label.to(device) for label in labels
-        ]  # ensure each label is on the right device
         model_output = model(model_input, labels=labels)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item() / deno)
