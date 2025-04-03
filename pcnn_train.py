@@ -27,7 +27,13 @@ def train_or_test(
 
     for batch_idx, (model_input, labels) in enumerate(tqdm(data_loader)):
         model_input = model_input.to(device)
-        model_output = model(model_input, labels=labels)
+        # Convert string labels to numeric indices and create a tensor
+        numeric_labels = torch.tensor(
+            [my_bidict[label] for label in labels], dtype=torch.long
+        ).to(device)
+        # Make sure numeric_labels is a 1D tensor of shape [batch_size]
+        numeric_labels = numeric_labels.view(-1)  # Flatten if needed
+        model_output = model(model_input, labels=numeric_labels)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item() / deno)
         if mode == "training":
@@ -209,14 +215,14 @@ if __name__ == "__main__":
             ),
             batch_size=args.batch_size,
             shuffle=True,
-            **kwargs
+            **kwargs,
         )
 
         test_loader = torch.utils.data.DataLoader(
             datasets.MNIST(args.data_dir, train=False, transform=ds_transforms),
             batch_size=args.batch_size,
             shuffle=True,
-            **kwargs
+            **kwargs,
         )
 
     elif "cifar" in args.dataset:
@@ -228,14 +234,14 @@ if __name__ == "__main__":
                 ),
                 batch_size=args.batch_size,
                 shuffle=True,
-                **kwargs
+                **kwargs,
             )
 
             test_loader = torch.utils.data.DataLoader(
                 datasets.CIFAR10(args.data_dir, train=False, transform=ds_transforms),
                 batch_size=args.batch_size,
                 shuffle=True,
-                **kwargs
+                **kwargs,
             )
         elif args.dataset == "cifar100":
             train_loader = torch.utils.data.DataLoader(
@@ -244,14 +250,14 @@ if __name__ == "__main__":
                 ),
                 batch_size=args.batch_size,
                 shuffle=True,
-                **kwargs
+                **kwargs,
             )
 
             test_loader = torch.utils.data.DataLoader(
                 datasets.CIFAR100(args.data_dir, train=False, transform=ds_transforms),
                 batch_size=args.batch_size,
                 shuffle=True,
-                **kwargs
+                **kwargs,
             )
         else:
             raise Exception(
@@ -266,7 +272,7 @@ if __name__ == "__main__":
             ),
             batch_size=args.batch_size,
             shuffle=True,
-            **kwargs
+            **kwargs,
         )
         test_loader = torch.utils.data.DataLoader(
             CPEN455Dataset(
@@ -274,7 +280,7 @@ if __name__ == "__main__":
             ),
             batch_size=args.batch_size,
             shuffle=True,
-            **kwargs
+            **kwargs,
         )
         val_loader = torch.utils.data.DataLoader(
             CPEN455Dataset(
@@ -282,7 +288,7 @@ if __name__ == "__main__":
             ),
             batch_size=args.batch_size,
             shuffle=True,
-            **kwargs
+            **kwargs,
         )
     else:
         raise Exception(
@@ -348,18 +354,32 @@ if __name__ == "__main__":
 
         if epoch % args.sampling_interval == 0:
             # Generate samples for each class
-            for class_idx in range(NUM_CLASSES):  # NUM_CLASSES is defined in dataset.py as 4
+            for class_idx in range(
+                NUM_CLASSES
+            ):  # NUM_CLASSES is defined in dataset.py as 4
                 # Create labels for sampling - all samples in this batch will be from the same class
-                sample_labels = torch.full((args.sample_batch_size,), class_idx, dtype=torch.long).to(device)
-                sample_t = sample(model, args.sample_batch_size, args.obs, sample_op, labels=sample_labels)
+                sample_labels = torch.full(
+                    (args.sample_batch_size,), class_idx, dtype=torch.long
+                ).to(device)
+                sample_t = sample(
+                    model,
+                    args.sample_batch_size,
+                    args.obs,
+                    sample_op,
+                    labels=sample_labels,
+                )
                 sample_t = rescaling_inv(sample_t)
                 # Save images with the class name as label
-                class_name = my_bidict.inverse[class_idx]  # Convert class index to name (e.g., "Class0")
+                class_name = my_bidict.inverse[
+                    class_idx
+                ]  # Convert class index to name (e.g., "Class0")
                 save_images(sample_t, args.sample_dir, label=class_name)
-                
+
                 # For wandb logging, you might want to log each class separately
                 if args.en_wandb:
-                    sample_result = wandb.Image(sample_t, caption=f"epoch {epoch} - {class_name}")
+                    sample_result = wandb.Image(
+                        sample_t, caption=f"epoch {epoch} - {class_name}"
+                    )
                     wandb.log({f"samples_{class_name}": sample_result})
 
             gen_data_dir = args.sample_dir
