@@ -102,7 +102,7 @@ class PixelCNN(nn.Module):
 
         # New!
         if num_classes is not None:
-            self.embedding = nn.Embedding(num_classes, input_channels)
+            self.embedding = nn.Embedding(num_classes, nr_filters)
 
         self.nr_filters = nr_filters
         self.input_channels = input_channels
@@ -209,7 +209,7 @@ class PixelCNN(nn.Module):
         # Build initial feature maps for the up pass
         u_list = [self.u_init(x)]
         ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
-        
+
         # NEW: Middle fusion injection
         if class_cond is not None:
             # Assuming class_cond is provided as one-hot, get the class index
