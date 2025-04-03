@@ -330,16 +330,17 @@ if __name__ == "__main__":
 
         # decrease learning rate
         scheduler.step()
-        train_or_test(
-            model=model,
-            data_loader=test_loader,
-            optimizer=optimizer,
-            loss_op=loss_op,
-            device=device,
-            args=args,
-            epoch=epoch,
-            mode="test",
-        )
+        # TODO remove testing because there's no labels (or smt like that)
+        # train_or_test( 
+        #     model=model,
+        #     data_loader=test_loader,
+        #     optimizer=optimizer,
+        #     loss_op=loss_op,
+        #     device=device,
+        #     args=args,
+        #     epoch=epoch,
+        #     mode="test",
+        # )
 
         train_or_test(
             model=model,
@@ -360,7 +361,7 @@ if __name__ == "__main__":
                 # Create labels for sampling - all samples in this batch will be from the same class
                 sample_labels = torch.full(
                     (args.sample_batch_size,), class_idx, dtype=torch.long
-                ).to(device)
+                ).to(next(model.parameters()).device)
                 sample_t = sample(
                     model,
                     args.sample_batch_size,
