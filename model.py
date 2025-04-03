@@ -198,8 +198,26 @@ class PixelCNN(nn.Module):
 
         ###      UP PASS    ###
         x = x if sample else torch.cat((x, self.init_padding), 1)
-        u_list  = [self.u_init(x)]
-        ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
+        
+        # New!
+        # Compute the initial outputs from the convolutions.
+        u_initial = self.u_init(x)
+        ul_initial = self.ul_init[0](x) + self.ul_init[1](x)
+
+        # If conditioning is provided, add the conditional embedding.
+        if class_cond is not None and hasattr(self, 'embedding'):
+            # If class_cond is passed as a one-hot vector, convert it to indices.
+            if class_cond.dim() == 2 and class_cond.size(1) > 1:
+                label_idx = torch.argmax(class_cond, dim=1)
+            else:
+                label_idx = class_cond
+            cond_embed = self.embedding(label_idx)  # (batch, nr_filters)
+            cond_embed = cond_embed.unsqueeze(2).unsqueeze(3)  # reshape to (batch, nr_filters, 1, 1)
+            u_initial = u_initial + cond_embed
+            ul_initial = ul_initial + cond_embed
+
+        u_list  = [u_initial]
+        ul_list = [ul_initial]
         for i in range(3):
             # resnet block
             u_out, ul_out = self.up_layers[i](u_list[-1], ul_list[-1])
