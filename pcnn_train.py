@@ -13,6 +13,7 @@ from pprint import pprint
 import argparse
 from pytorch_fid.fid_score import calculate_fid_given_paths
 
+NUM_CLASSES = 4
 
 def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, mode = 'training'):
     if mode == 'training':
@@ -24,9 +25,11 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
     loss_tracker = mean_tracker()
     
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, _ = item
+        model_input, label = item
         model_input = model_input.to(device)
-        model_output = model(model_input)
+        label = label.to(device)
+        one_hot_label = torch.nn.functiona.one_hot(label, num_classes=NUM_CLASSES)
+        model_output = model(model_input, class_cond = one_hot_label)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item()/deno)
         if mode == 'training':
@@ -181,7 +184,7 @@ if __name__ == '__main__':
     sample_op = lambda x : sample_from_discretized_mix_logistic(x, args.nr_logistic_mix)
 
     model = PixelCNN(nr_resnet=args.nr_resnet, nr_filters=args.nr_filters, 
-                input_channels=input_channels, nr_logistic_mix=args.nr_logistic_mix)
+                input_channels=input_channels, nr_logistic_mix=args.nr_logistic_mix, num_classes=NUM_CLASSES)
     model = model.to(device)
 
     if args.load_params:
@@ -222,11 +225,27 @@ if __name__ == '__main__':
                       mode = 'val')
         
         if epoch % args.sampling_interval == 0:
-            print('......sampling......')
-            sample_t = sample(model, args.sample_batch_size, args.obs, sample_op)
-            sample_t = rescaling_inv(sample_t)
-            save_images(sample_t, args.sample_dir)
-            sample_result = wandb.Image(sample_t, caption="epoch {}".format(epoch))
+            print('......conditional sampling by class......')
+            samples_list = []
+            # Assuming args.num_classes is set to 4
+            # Divide the sample_batch_size evenly among the 4 classes.
+            samples_per_class = args.sample_batch_size // args.num_classes  
+            # Loop over each class index (0,1,2,3)
+            for class_idx in range(args.num_classes):
+                # Create a one-hot vector for the current class.
+                # For 4 classes, torch.eye(4)[i] gives a one-hot vector (e.g., [1,0,0,0] for class 0)
+                class_cond = torch.eye(args.num_classes)[class_idx].unsqueeze(0).repeat(samples_per_class, 1).to(device)
+                # Call your sample function with the fixed condition for this class
+                sample_images = sample(model, samples_per_class, args.obs, sample_op, class_cond=class_cond)
+                samples_list.append(sample_images)
+            # Concatenate samples from all classes along the batch dimension
+            all_samples = torch.cat(samples_list, dim=0)
+            # Undo the rescaling if needed
+            all_samples = rescaling_inv(all_samples)
+            # Save or display the generated samples
+            save_images(all_samples, args.sample_dir)
+            
+            sample_result = wandb.Image(all_samples, caption="epoch {}".format(epoch))
             
             gen_data_dir = args.sample_dir
             ref_data_dir = args.data_dir +'/test'
