@@ -28,12 +28,7 @@ def train_or_test(
     for batch_idx, (model_input, labels) in enumerate(tqdm(data_loader)):
         model_input = model_input.to(device)
         # Convert string labels to numeric indices and create a tensor
-        numeric_labels = torch.tensor(
-            [my_bidict[label] for label in labels], dtype=torch.long
-        ).to(device)
-        # Make sure numeric_labels is a 1D tensor of shape [batch_size]
-        numeric_labels = numeric_labels.view(-1)  # Flatten if needed
-        model_output = model(model_input, labels=numeric_labels)
+        model_output = model(model_input, labels=labels)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item() / deno)
         if mode == "training":
