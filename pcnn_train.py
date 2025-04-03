@@ -25,10 +25,11 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
     loss_tracker = mean_tracker()
     
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, label = item
+        model_input, label_strs = item
         model_input = model_input.to(device)
-        label = label.to(device)
-        one_hot_label = torch.nn.functiona.one_hot(label, num_classes=NUM_CLASSES)
+        # Convert string labels to integer indices using my_bidict (imported from dataset.py)
+        label_ints = torch.tensor([my_bidict[label] for label in label_strs], dtype=torch.long, device=device)
+        one_hot_label = torch.nn.functional.one_hot(label_ints, num_classes=NUM_CLASSES).float()       
         model_output = model(model_input, class_cond = one_hot_label)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item()/deno)
