@@ -181,17 +181,6 @@ class PixelCNN(nn.Module):
         self.init_padding = None
 
     def forward(self, x, sample=False, class_cond=None):
-        # New: Incorporate conditional information if provided
-        if class_cond is not None:
-            # Convert one-hot vector to class indices
-            class_idx = class_cond.argmax(dim=1)
-            # Get the embedding for current class; shape: (batch, input_channels)
-            emb = self.embedding(class_idx)
-            # Reshape to (batch, input_channels, 1, 1) for broadcasting
-            emb = emb.unsqueeze(2).unsqueeze(3)
-            # Add embedding to input x; now x incorporates conditioning
-            x = x + emb
-
         # similar as done in the tf repo :
         if self.init_padding is not sample:
             xs = [int(y) for y in x.size()]
@@ -206,23 +195,11 @@ class PixelCNN(nn.Module):
         else:
             x = torch.cat((x, self.init_padding), 1)
 
-        # Build initial feature maps for the up pass
-        u_list = [self.u_init(x)]
-        ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
-
-        # NEW: Middle fusion injection
-        if class_cond is not None:
-            # Assuming class_cond is provided as one-hot, get the class index
-            class_idx = class_cond.argmax(dim=1)
-            # Retrieve the learned embedding for the current class.
-            emb = self.embedding(class_idx)
-            # Reshape to (batch_size, input_channels, 1, 1) for broadcasting.
-            emb = emb.unsqueeze(2).unsqueeze(3)
-            # Fuse the embedding with the intermediate features.
-            u_list[-1] = u_list[-1] + emb
-            ul_list[-1] = ul_list[-1] + emb
 
         ###      UP PASS    ###
+        x = x if sample else torch.cat((x, self.init_padding), 1)
+        u_list  = [self.u_init(x)]
+        ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
         for i in range(3):
             # resnet block
             u_out, ul_out = self.up_layers[i](u_list[-1], ul_list[-1])
