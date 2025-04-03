@@ -190,7 +190,7 @@ class PixelCNN(nn.Module):
             emb = self.embedding(labels)
             batch_size = x.size(0)
             # Reshape to [batch, channels, 1, 1] so that it can be broadcast spatially
-            emb = emb.view(batch_size, self.embedding_dims, 1, 1)
+            emb = emb.view(batch_size, self.embedding_dim, 1, 1)
             # Fuse the condition with the input (or with an intermediate feature map); one simple way is addition.
             x = x + emb
 
