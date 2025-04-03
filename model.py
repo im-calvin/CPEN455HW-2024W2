@@ -105,7 +105,7 @@ class PixelCNN(nn.Module):
         # New!
         if num_classes is not None:
             self.embedding = nn.Embedding(num_classes, embedding_dim=embedding_dim)
-            self.emb_linear = nn.Linear(embedding_dim, input_channels)
+            self.embedding_dim = embedding_dim
 
         self.nr_filters = nr_filters
         self.input_channels = input_channels
@@ -184,14 +184,13 @@ class PixelCNN(nn.Module):
         self.init_padding = None
 
     def forward(self, x, sample=False, labels=None):
-        # New: Incorporate conditional information if provided
+        # New: Early fusion
         if labels is not None:
             # Get embedding for labels; shape: [batch, embed_dim]
             emb = self.embedding(labels)
-
-            emb = self.emb_linear(emb)  # shape: [batch, input_channels]
+            batch_size = x.size(0)
             # Reshape to [batch, channels, 1, 1] so that it can be broadcast spatially
-            emb = emb.view(x.size(0), self.input_channels, 1, 1)
+            emb = emb.view(batch_size, self.embedding_dims, 1, 1)
             # Fuse the condition with the input (or with an intermediate feature map); one simple way is addition.
             x = x + emb
 
