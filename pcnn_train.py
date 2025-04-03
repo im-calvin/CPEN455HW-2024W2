@@ -301,6 +301,7 @@ if __name__ == "__main__":
         nr_filters=args.nr_filters,
         input_channels=input_channels,
         nr_logistic_mix=args.nr_logistic_mix,
+        embedding_dim=32,
     )
     model = model.to(device)
 

@@ -92,6 +92,7 @@ class PixelCNN(nn.Module):
         resnet_nonlinearity="concat_elu",
         input_channels=3,
         num_classes=NUM_CLASSES,
+        embedding_dim=32,  # hyper param
     ):
         super(PixelCNN, self).__init__()
         if resnet_nonlinearity == "concat_elu":
@@ -103,8 +104,8 @@ class PixelCNN(nn.Module):
 
         # New!
         if num_classes is not None:
-            self.embedding = nn.Embedding(num_classes, nr_filters)
-            self.emb_linear = nn.Linear(nr_filters, input_channels)
+            self.embedding = nn.Embedding(num_classes, embedding_dim=embedding_dim)
+            self.emb_linear = nn.Linear(embedding_dim, input_channels)
 
         self.nr_filters = nr_filters
         self.input_channels = input_channels
