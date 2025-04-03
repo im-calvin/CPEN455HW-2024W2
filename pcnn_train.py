@@ -25,10 +25,12 @@ def train_or_test(
     deno = args.batch_size * np.prod(args.obs) * np.log(2.0)
     loss_tracker = mean_tracker()
 
-    for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, _ = item
+    for batch_idx, (model_input, labels) in enumerate(tqdm(data_loader)):
         model_input = model_input.to(device)
-        model_output = model(model_input)
+        labels = [
+            label.to(device) for label in labels
+        ]  # ensure each label is on the right device
+        model_output = model(model_input, labels=labels)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item() / deno)
         if mode == "training":
@@ -348,11 +350,20 @@ if __name__ == "__main__":
         )
 
         if epoch % args.sampling_interval == 0:
-            print("......sampling......")
-            sample_t = sample(model, args.sample_batch_size, args.obs, sample_op)
-            sample_t = rescaling_inv(sample_t)
-            save_images(sample_t, args.sample_dir)
-            sample_result = wandb.Image(sample_t, caption="epoch {}".format(epoch))
+            # Generate samples for each class
+            for class_idx in range(NUM_CLASSES):  # NUM_CLASSES is defined in dataset.py as 4
+                # Create labels for sampling - all samples in this batch will be from the same class
+                sample_labels = torch.full((args.sample_batch_size,), class_idx, dtype=torch.long).to(device)
+                sample_t = sample(model, args.sample_batch_size, args.obs, sample_op, labels=sample_labels)
+                sample_t = rescaling_inv(sample_t)
+                # Save images with the class name as label
+                class_name = my_bidict.inverse[class_idx]  # Convert class index to name (e.g., "Class0")
+                save_images(sample_t, args.sample_dir, label=class_name)
+                
+                # For wandb logging, you might want to log each class separately
+                if args.en_wandb:
+                    sample_result = wandb.Image(sample_t, caption=f"epoch {epoch} - {class_name}")
+                    wandb.log({f"samples_{class_name}": sample_result})
 
             gen_data_dir = args.sample_dir
             ref_data_dir = args.data_dir + "/test"

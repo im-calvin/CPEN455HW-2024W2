@@ -14,6 +14,7 @@ rescaling_inv = lambda x: 0.5 * x + 0.5
 replicate_color_channel = lambda x: x.repeat(3, 1, 1)
 
 my_bidict = bidict({"Class0": 0, "Class1": 1, "Class2": 2, "Class3": 3})
+NUM_CLASSES = 4
 
 
 class CPEN455Dataset(Dataset):

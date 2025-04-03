@@ -1,5 +1,6 @@
 import torch.nn as nn
 from layers import *
+from dataset import *
 
 
 class PixelCNNLayer_up(nn.Module):
@@ -90,7 +91,7 @@ class PixelCNN(nn.Module):
         nr_logistic_mix=10,
         resnet_nonlinearity="concat_elu",
         input_channels=3,
-        num_classes=None,
+        num_classes=NUM_CLASSES,
     ):
         super(PixelCNN, self).__init__()
         if resnet_nonlinearity == "concat_elu":
@@ -102,7 +103,7 @@ class PixelCNN(nn.Module):
 
         # New!
         if num_classes is not None:
-            self.embedding = nn.Embedding(num_classes, input_channels)
+            self.embedding = nn.Embedding(num_classes, nr_filters)
 
         self.nr_filters = nr_filters
         self.input_channels = input_channels
@@ -180,16 +181,14 @@ class PixelCNN(nn.Module):
         self.nin_out = nin(nr_filters, num_mix * nr_logistic_mix)
         self.init_padding = None
 
-    def forward(self, x, sample=False, class_cond=None):
+    def forward(self, x, sample=False, labels=None):
         # New: Incorporate conditional information if provided
-        if class_cond is not None:
-            # Convert one-hot vector to class indices
-            class_idx = class_cond.argmax(dim=1)
-            # Get the embedding for current class; shape: (batch, input_channels)
-            emb = self.embedding(class_idx)
-            # Reshape to (batch, input_channels, 1, 1) for broadcasting
-            emb = emb.unsqueeze(2).unsqueeze(3)
-            # Add embedding to input x; now x incorporates conditioning
+        if labels is not None:
+            # Get embedding for labels; shape: [batch, embed_dim]
+            emb = self.embedding(labels)
+            # Reshape to [batch, channels, 1, 1] so that it can be broadcast spatially
+            emb = emb.view(x.size(0), -1, 1, 1)
+            # Fuse the condition with the input (or with an intermediate feature map); one simple way is addition.
             x = x + emb
 
         # similar as done in the tf repo :
