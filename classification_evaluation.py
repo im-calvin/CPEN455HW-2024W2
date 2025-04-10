@@ -23,49 +23,41 @@ import csv
 NUM_CLASSES = len(my_bidict)
 
 
-# TODO: Begin of your code
-# def get_label(model, model_input, device):
-#     # Write your code here, replace the random classifier with your trained model
-#     # and return the predicted label, which is a tensor of shape (batch_size,)
-#     answer = model(model_input, device)
-#     return answer
-
-# End of your code
-
-
-# TODO: Begin of your code
 def get_label(model, model_input, device):
-    # model_input shape is (batch_size, 3, 32, 32)
-    model_input = model_input.to(device)
-    batch_size = model_input.shape[0]
-
-    # Compute the log-likelihood for each class
-    log_probs = []
-    with torch.no_grad():
-        for class_idx in range(NUM_CLASSES):
-            # create a one-hot vector for the current class
-            class_condition = torch.zeros(batch_size, NUM_CLASSES).to(device)
-            class_condition[:, class_idx] = 1
-
-            # forward pass through the model, conditioned on class_condition
-            output = model(model_input, sample=False, class_cond=class_condition)
-
-            # compute the log-likelihood of model_input given the current class
-            ll = discretized_mix_logistic_loss(model_input, output, sum_all=False)
-            ll = -ll.view(batch_size, -1).sum(dim=1)  # negative loss is log-probability
-
-            log_probs.append(ll.unsqueeze(1))  # shape (batch_size, 1)
-
-    # Stack the log probabilities to shape (batch_size, num_classes)
-    log_probs = torch.cat(log_probs, dim=1)  # (batch_size, NUM_CLASSES)
-
-    # predict the label: the class with the highest log_prob
-    predicted_label = torch.argmax(log_probs, dim=1)
-
-    return predicted_label  # tensor shape: (batch_size,)
-
-
-# End of your code
+    """
+    Classify images by finding which class label minimizes the generation loss.
+    
+    Args:
+        model: The trained PixelCNN model
+        model_input: Input images of shape (batch_size, channels, height, width)
+        device: Device to run computations on
+        
+    Returns:
+        Tensor of predicted class labels for each image in the batch
+    """
+    B = model_input.shape[0]
+    
+    # Initialize tensor to store losses for each class for each image
+    class_losses = torch.zeros((NUM_CLASSES, B), device=device)
+    
+    # Try each possible class label
+    for class_label in range(NUM_CLASSES):
+        # Create tensor of current class label for the entire batch
+        class_condition = torch.full((B,), class_label, device=device)
+        
+        # Get model predictions conditioned on current class
+        predictions = model(model_input, class_condition, device)
+        
+        # Calculate loss between predictions and actual input
+        # Using training=False to get per-pixel losses instead of summed loss
+        class_losses[class_label] = discretized_mix_logistic_loss(
+            model_input, predictions, training=False
+        )
+    
+    # For each image, find the class that gave the lowest loss
+    predicted_classes = torch.argmin(class_losses, dim=0)
+    
+    return predicted_classes
 
 
 def classifier(model, data_loader, device):
@@ -114,7 +106,7 @@ if __name__ == "__main__":
         nr_resnet=1,
         nr_filters=40,
         input_channels=3,
-        nr_logistic_mix=5,
+        nr_logistic_mix=10,
         num_classes=NUM_CLASSES,
     ).to(device)
     # End of your code
