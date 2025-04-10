@@ -127,8 +127,8 @@ class PixelCNN(nn.Module):
         self.nin_out = nin(nr_filters, num_mix * nr_logistic_mix)
         self.init_padding = None
 
-        self.pos_encoding = AbsolutePositionalEncoding(self.MAX_LEN, self.nr_filters)
-        self.pos_embedding = nn.Embedding(self.NUM_CLASSES, self.nr_filters)
+        self.embedding = nn.Embedding(self.NUM_CLASSES, self.nr_filters)
+        self.emb_linear = nn.Linear(self.nr_filters, self.nr_filters)
 
     def forward(self, x, class_cond, sample=False):
         
@@ -159,7 +159,10 @@ class PixelCNN(nn.Module):
                 u_list  += [self.downsize_u_stream[i](u_list[-1])]
                 ul_list += [self.downsize_ul_stream[i](ul_list[-1])]
                 
-        label_embeddings = self.pos_embedding(class_cond.to(x.device)).unsqueeze(-1).unsqueeze(-1)
+        label_embeddings = self.embedding(class_cond.to(x.device))
+        label_embeddings = self.emb_linear(label_embeddings)
+        label_embeddings = label_embeddings.unsqueeze(-1).unsqueeze(-1)
+
         self.add_embedding_to_u_ul(u_list, label_embeddings)
         self.add_embedding_to_u_ul(ul_list, label_embeddings)
 
