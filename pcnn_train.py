@@ -225,7 +225,7 @@ if __name__ == '__main__':
             print('......sampling......')
             
             
-            for label in my_bidict:
+            for label in my_bidict.values():
                 print(f"Generating images for label: {label}")
                 class_cond = torch.full((args.sample_batch_size,), label).to(next(model.parameters()).device)
                 sample_t = sample(model, args.sample_batch_size, args.obs, sample_op, class_cond=class_cond)
