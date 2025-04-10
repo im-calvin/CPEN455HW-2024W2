@@ -24,9 +24,9 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
     loss_tracker = mean_tracker()
     
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, _ = item
+        model_input, _, class_cond = item
         model_input = model_input.to(device)
-        model_output = model(model_input)
+        model_output = model(model_input, class_cond)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item()/deno)
         if mode == 'training':
@@ -159,12 +159,12 @@ if __name__ == '__main__':
                                                    batch_size=args.batch_size, 
                                                    shuffle=True, 
                                                    **kwargs)
-        test_loader  = torch.utils.data.DataLoader(CPEN455Dataset(root_dir=args.data_dir, 
-                                                                  mode = 'test', 
-                                                                  transform=ds_transforms), 
-                                                   batch_size=args.batch_size, 
-                                                   shuffle=True, 
-                                                   **kwargs)
+        # test_loader  = torch.utils.data.DataLoader(CPEN455Dataset(root_dir=args.data_dir, 
+        #                                                           mode = 'test', 
+        #                                                           transform=ds_transforms), 
+        #                                            batch_size=args.batch_size, 
+        #                                            shuffle=True, 
+        #                                            **kwargs)
         val_loader  = torch.utils.data.DataLoader(CPEN455Dataset(root_dir=args.data_dir, 
                                                                   mode = 'validation', 
                                                                   transform=ds_transforms), 
@@ -203,14 +203,14 @@ if __name__ == '__main__':
         
         # decrease learning rate
         scheduler.step()
-        train_or_test(model = model,
-                      data_loader = test_loader,
-                      optimizer = optimizer,
-                      loss_op = loss_op,
-                      device = device,
-                      args = args,
-                      epoch = epoch,
-                      mode = 'test')
+        # train_or_test(model = model,
+        #               data_loader = test_loader,
+        #               optimizer = optimizer,
+        #               loss_op = loss_op,
+        #               device = device,
+        #               args = args,
+        #               epoch = epoch,
+        #               mode = 'test')
         
         train_or_test(model = model,
                       data_loader = val_loader,
@@ -223,10 +223,15 @@ if __name__ == '__main__':
         
         if epoch % args.sampling_interval == 0:
             print('......sampling......')
-            sample_t = sample(model, args.sample_batch_size, args.obs, sample_op)
-            sample_t = rescaling_inv(sample_t)
-            save_images(sample_t, args.sample_dir)
-            sample_result = wandb.Image(sample_t, caption="epoch {}".format(epoch))
+            
+            
+            for label in my_bidict:
+                print(f"Generating images for label: {label}")
+                class_cond = torch.full((args.sample_batch_size,), label).to(next(model.parameters()).device)
+                sample_t = sample(model, args.sample_batch_size, args.obs, sample_op, class_cond=class_cond)
+                sample_t = rescaling_inv(sample_t)
+                save_images(sample_t, args.sample_dir, label=label)
+                sample_result = wandb.Image(sample_t, caption="epoch {} - label {}".format(epoch, label))
             
             gen_data_dir = args.sample_dir
             ref_data_dir = args.data_dir +'/test'

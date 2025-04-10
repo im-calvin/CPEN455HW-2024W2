@@ -21,7 +21,7 @@ import argparse
 # This is a demonstration of how to call the sample function, feel free to modify it
 # You should modify this sample function to get the generated images from your model
 # You should save the generated images to the gen_data_dir, which is fixed as 'samples'
-sample_op = lambda x : sample_from_discretized_mix_logistic(x, 5)
+sample_op = lambda x : sample_from_discretized_mix_logistic(x, 10)
 # def my_sample(model, gen_data_dir, sample_batch_size = 25, obs = (3,32,32), sample_op = sample_op):
 #     for label in my_bidict:
 #         print(f"Label: {label}")
@@ -51,11 +51,10 @@ def my_sample(
     for label in my_bidict:
         print(f"Generating {sample_batch_size} images for label: {label}")
         
-        # Assume my_bidict[label] returns the class index
-        class_index = my_bidict[label]  
-        class_cond = torch.zeros(sample_batch_size, len(my_bidict)).to(device)
-        class_cond[:, class_index] = 1
-
+        # Create label tensor for the batch
+        class_cond = torch.full((sample_batch_size,), label)
+        class_cond = class_cond.to(next(model.parameters()).device)
+        
         # Generate samples
         # sample function doesn't use label information directly
         # So we calling it as is and assign labels during saving
@@ -85,7 +84,7 @@ if __name__ == "__main__":
 
     #TODO: Begin of your code
     #Load your model and generate images in the gen_data_dir, feel free to modify the model
-    model = PixelCNN(nr_resnet=1, nr_filters=40, input_channels=3, nr_logistic_mix=5)
+    model = PixelCNN(nr_resnet=1, nr_filters=40, input_channels=3, nr_logistic_mix=10)
     model = model.to(device)
     model = model.eval()
     #End of your code

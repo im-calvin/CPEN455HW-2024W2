@@ -42,11 +42,12 @@ def get_label(model, model_input, device):
     
     # Try each possible class label
     for class_label in range(NUM_CLASSES):
-        # Create tensor of current class label for the entire batch
-        class_condition = torch.full((B,), class_label, device=device)
+        # Create one-hot encoded class condition
+        class_cond = torch.zeros(B, NUM_CLASSES, device=device)
+        class_cond[:, class_label] = 1
         
         # Get model predictions conditioned on current class
-        predictions = model(model_input, class_condition, device)
+        predictions = model(model_input, class_cond, device)
         
         # Calculate loss between predictions and actual input
         # Using training=False to get per-pixel losses instead of summed loss

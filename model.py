@@ -48,20 +48,47 @@ class PixelCNNLayer_down(nn.Module):
             ul = self.ul_stream[i](ul, a=torch.cat((u, ul_list.pop()), 1))
 
         return u, ul
+    
+# From PA2 :D
+class AbsolutePositionalEncoding(nn.Module):
+    MAX_LEN = 256
+    def __init__(self, num_classes, d_model):
+        super().__init__()
+        self.W = nn.Parameter(torch.empty((num_classes, d_model)))
+        nn.init.normal_(self.W)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        self:
+            w: shape 256 x D 
+        args:
+            x: shape B x N x D
+        returns:
+            out: shape B x N x D
+
+        START BLOCK
+        """
+        b, n, d = x.shape
+        w = self.W.clone()[0:n, :] # w is n x d
+        out = x + w # the batch addition is done automagically by torch :D 
+        """
+        END BLOCK
+        """
+        return out
 
 
 class PixelCNN(nn.Module):
+    MAX_LEN = 256
+    APE_DIM = 32
+    NUM_CLASSES = 4
+    
     def __init__(self, nr_resnet=5, nr_filters=80, nr_logistic_mix=10,
-                    resnet_nonlinearity='concat_elu', input_channels=3, num_classes=None):
+                    resnet_nonlinearity='concat_elu', input_channels=3):
         super(PixelCNN, self).__init__()
         if resnet_nonlinearity == 'concat_elu' :
             self.resnet_nonlinearity = lambda x : concat_elu(x)
         else :
             raise Exception('right now only concat elu is supported as resnet nonlinearity.')
-
-        # New!
-        if num_classes is not None:
-            self.embedding = nn.Embedding(num_classes, input_channels)
         
         self.nr_filters = nr_filters
         self.input_channels = input_channels
@@ -100,18 +127,10 @@ class PixelCNN(nn.Module):
         self.nin_out = nin(nr_filters, num_mix * nr_logistic_mix)
         self.init_padding = None
 
+        self.pos_encoding = AbsolutePositionalEncoding(self.MAX_LEN, self.nr_filters)
+        self.pos_embedding = nn.Embedding(self.NUM_CLASSES, self.nr_filters)
 
-    def forward(self, x, sample=False, class_cond = None):
-        # New: Incorporate conditional information if provided
-        if class_cond is not None:
-            # Convert one-hot vector to class indices
-            class_idx = class_cond.argmax(dim=1)
-            # Get the embedding for current class; shape: (batch, input_channels)
-            emb = self.embedding(class_idx)
-            # Reshape to (batch, input_channels, 1, 1) for broadcasting
-            emb = emb.unsqueeze(2).unsqueeze(3)
-            # Add embedding to input x; now x incorporates conditioning
-            x = x + emb
+    def forward(self, x, class_cond, sample=False):
         
         # similar as done in the tf repo :
         if self.init_padding is not sample:
@@ -139,6 +158,10 @@ class PixelCNN(nn.Module):
                 # downscale (only twice)
                 u_list  += [self.downsize_u_stream[i](u_list[-1])]
                 ul_list += [self.downsize_ul_stream[i](ul_list[-1])]
+                
+        label_embeddings = self.pos_embedding(class_cond.to(x.device)).unsqueeze(-1).unsqueeze(-1)
+        self.add_embedding_to_u_ul(u_list, label_embeddings)
+        self.add_embedding_to_u_ul(ul_list, label_embeddings)
 
         ###    DOWN PASS    ###
         u  = u_list.pop()
@@ -158,6 +181,10 @@ class PixelCNN(nn.Module):
         assert len(u_list) == len(ul_list) == 0, pdb.set_trace()
 
         return x_out
+
+    def add_embedding_to_u_ul(self, tensor_list, embedding_tensor):
+        for i in range(len(tensor_list)):
+            tensor_list[i] += embedding_tensor
     
     
 class random_classifier(nn.Module):
