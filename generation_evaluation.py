@@ -48,7 +48,7 @@ def my_sample(
     # Make sure directory exists
     os.makedirs(gen_data_dir, exist_ok=True)
 
-    for label in my_bidict:
+    for label in my_bidict.values():
         print(f"Generating {sample_batch_size} images for label: {label}")
         
         # Create label tensor for the batch

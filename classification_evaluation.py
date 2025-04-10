@@ -108,7 +108,6 @@ if __name__ == "__main__":
         nr_filters=40,
         input_channels=3,
         nr_logistic_mix=10,
-        num_classes=NUM_CLASSES,
     ).to(device)
     # End of your code
 
