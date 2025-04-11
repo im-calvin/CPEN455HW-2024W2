@@ -10,7 +10,9 @@ from tqdm import tqdm
 def main():
     # Initialize model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = PixelCNN().to(device)
+    model = PixelCNN(
+        nr_resnet=1, nr_filters=40, input_channels=3, nr_logistic_mix=10
+    ).to(device)
 
     # Load trained weights
     model_path = os.path.join(
