@@ -2,6 +2,7 @@ import os
 import torch
 import pandas as pd
 import numpy as np
+import csv
 from torchvision.transforms import Compose, Resize
 from dataset import CPEN455Dataset, rescaling, my_bidict
 from model import PixelCNN
@@ -35,7 +36,7 @@ def get_label(model, model_input, device):
 
         # Calculate loss between predictions and actual input
         loss_from_log_likelihood[possible_class, :] = discretized_mix_logistic_loss(
-            model_input, answer 
+            model_input, answer
         )
 
     # For each image, find the class that gave the lowest loss
@@ -66,6 +67,13 @@ def main():
         test_dataset, batch_size=32, shuffle=False
     )
 
+    # Read test file names from test.csv
+    test_file_names = []
+    with open("./data/test.csv", "r") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            test_file_names.append(row[0])
+
     # Initialize results list
     results = []
     logits = []
@@ -79,16 +87,12 @@ def main():
             results.extend(predicted_classes.cpu().numpy())
             logits.append(logit.T.cpu().detach().numpy())
 
-    # Create submission DataFrame
-    submission = pd.DataFrame(
-        {
-            "path": [os.path.basename(path) for path, _ in test_dataset.samples],
-            "label": results,
-        }
-    )
+    # Create submission file
+    with open("submission.csv", "w", newline="") as f:
+        writer = csv.writer(f)
+        for file_name, label in zip(test_file_names, results):
+            writer.writerow([file_name, str(label)])
 
-    # Save to CSV
-    submission.to_csv("submission.csv", index=False)
     print("Predictions saved to submission.csv")
 
     # Save logits
