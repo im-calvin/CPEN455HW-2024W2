@@ -35,7 +35,7 @@ def get_label(model, model_input, device):
 
         # Calculate loss between predictions and actual input
         loss_from_log_likelihood[possible_class, :] = discretized_mix_logistic_loss(
-            model_input, answer, training=False
+            model_input, answer 
         )
 
     # For each image, find the class that gave the lowest loss
