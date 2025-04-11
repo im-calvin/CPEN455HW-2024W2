@@ -26,38 +26,35 @@ NUM_CLASSES = len(my_bidict)
 def get_label(model, model_input, device):
     """
     Classify images by finding which class label minimizes the generation loss.
-    
+
     Args:
         model: The trained PixelCNN model
         model_input: Input images of shape (batch_size, channels, height, width)
         device: Device to run computations on
-        
+
     Returns:
         Tensor of predicted class labels for each image in the batch
     """
     B = model_input.shape[0]
-    
+
     # Initialize tensor to store losses for each class for each image
     class_losses = torch.zeros((NUM_CLASSES, B), device=device)
-    
+
     # Try each possible class label
     for class_label in range(NUM_CLASSES):
-        # Create one-hot encoded class condition
-        class_cond = torch.zeros(B, NUM_CLASSES, device=device)
-        class_cond[:, class_label] = 1
-        
+        # Create class condition tensor
+        class_cond = torch.full((B,), class_label, device=device)
+
         # Get model predictions conditioned on current class
-        predictions = model(model_input, class_cond, device)
-        
+        predictions = model(model_input, class_cond)
+
         # Calculate loss between predictions and actual input
-        # Using training=False to get per-pixel losses instead of summed loss
-        class_losses[class_label] = discretized_mix_logistic_loss(
-            model_input, predictions, training=False
-        )
-    
+        loss = discretized_mix_logistic_loss(model_input, predictions)
+        class_losses[class_label] = loss
+
     # For each image, find the class that gave the lowest loss
     predicted_classes = torch.argmin(class_losses, dim=0)
-    
+
     return predicted_classes
 
 
