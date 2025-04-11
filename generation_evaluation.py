@@ -87,6 +87,9 @@ if __name__ == "__main__":
     model = PixelCNN(nr_resnet=1, nr_filters=40, input_channels=3, nr_logistic_mix=10)
     model = model.to(device)
     model = model.eval()
+    
+    # load the model
+    model.load_state_dict(torch.load('models/conditional_pixelcnn.pth'))
     #End of your code
     
     my_sample(model=model, gen_data_dir=gen_data_dir)
