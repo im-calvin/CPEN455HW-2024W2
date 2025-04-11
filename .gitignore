@@ -235,3 +235,6 @@ pyrightconfig.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,python
+
+# allow model to be committed
+!models/conditional_pixelcnn.pth
