@@ -62,7 +62,7 @@ def classifier(model, data_loader, device):
     model.eval()
     acc_tracker = ratio_tracker()
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, categories, _, _ = item
+        model_input, categories, _  = item
         model_input = model_input.to(device)
         original_label = [my_bidict[item] for item in categories]
         original_label = torch.tensor(original_label, dtype=torch.int64).to(device)
