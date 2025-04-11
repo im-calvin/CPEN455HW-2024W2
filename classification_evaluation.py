@@ -102,7 +102,7 @@ if __name__ == "__main__":
     # TODO:Begin of your code
     model = PixelCNN(
         nr_resnet=1,
-        nr_filters=40,
+        nr_filters=80,
         input_channels=3,
         nr_logistic_mix=10,
     ).to(device)
