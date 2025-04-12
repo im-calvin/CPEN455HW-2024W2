@@ -22,18 +22,33 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
         
     deno =  args.batch_size * np.prod(args.obs) * np.log(2.)        
     loss_tracker = mean_tracker()
-    
+    correct = 0  # To track correct predictions
+    total = 0    # To track total predictions
+
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, _, class_cond = item
+        model_input, labels, class_cond = item
         model_input = model_input.to(device)
         model_output = model(model_input, class_cond)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item()/deno)
+
+        
+        if epoch % 25 == 0:  # Calculate accuracy only every 25 epochs
+            _, predicted = torch.max(model_output, 1)  # Get predicted class
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+        
         if mode == 'training':
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        
+            
+    if epoch % 25 == 0 and total > 0:  # Log accuracy only every 50 epochs
+        accuracy = 100. * correct / total
+        if args.en_wandb:
+            wandb.log({f"{mode}_accuracy": accuracy, f"{mode}_loss": loss_tracker.get_mean(), "epoch": epoch})
+        print(f"{mode.capitalize()} Accuracy (Epoch {epoch}): {accuracy:.2f}%")
+
     if args.en_wandb:
         wandb.log({mode + "-Average-BPD" : loss_tracker.get_mean()})
         wandb.log({mode + "-epoch": epoch})
