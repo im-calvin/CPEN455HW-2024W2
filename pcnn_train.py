@@ -13,6 +13,7 @@ from pprint import pprint
 import argparse
 from pytorch_fid.fid_score import calculate_fid_given_paths
 
+NUM_CLASSES = 4
 
 def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, mode = 'training'):
     if mode == 'training':
@@ -20,7 +21,7 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
     else:
         model.eval()
         
-    deno =  args.batch_size * np.prod(args.obs) * np.log(2.)        
+    deno = args.batch_size * np.prod(args.obs) * np.log(2.)        
     loss_tracker = mean_tracker()
     correct = 0
     total = 0
@@ -29,23 +30,38 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
         model_input, _, labels = item
         model_input = model_input.to(device)
         labels = labels.to(device)
-        model_output = model(model_input, labels)
-        loss = loss_op(model_input, model_output)
-        loss_tracker.update(loss.item()/deno)
-
-        # Calculate accuracy
-        with torch.no_grad():
-            # For PixelCNN, we need to sample from the model to get predictions
-            # This is a simplified version - you might want to adjust based on your needs
-            predicted = torch.argmax(model_output, dim=1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    
+        
         if mode == 'training':
+            # During training, we only compute loss for the true labels
+            model_output = model(model_input, labels)
+            loss = loss_op(model_input, model_output)
+            loss_tracker.update(loss.item()/deno)
+            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+        else:
+            # During evaluation, we need to try all possible class labels
+            with torch.no_grad():
+                B = model_input.shape[0]
+                class_losses = torch.zeros((NUM_CLASSES, B), device=device)
+                
+                # Try each possible class label
+                for class_label in range(NUM_CLASSES):
+                    class_cond = torch.full((B,), class_label, device=device)
+                    predictions = model(model_input, class_cond)
+                    loss = loss_op(model_input, predictions)
+                    class_losses[class_label] = loss
+                
+                # Get predictions and update accuracy
+                predicted = torch.argmin(class_losses, dim=0)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+                
+                # Update loss tracker with the loss for true labels
+                true_label_losses = torch.gather(class_losses, 0, labels.unsqueeze(0))[0]
+                loss_tracker.update(true_label_losses.mean().item()/deno)
+    
     accuracy = 100 * correct / total if total > 0 else 0
     
     if args.en_wandb:
