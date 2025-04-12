@@ -22,36 +22,38 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
         
     deno =  args.batch_size * np.prod(args.obs) * np.log(2.)        
     loss_tracker = mean_tracker()
-    correct = 0  # To track correct predictions
-    total = 0    # To track total predictions
+    correct = 0
+    total = 0
 
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, labels, class_cond = item
+        model_input, _, labels = item
         model_input = model_input.to(device)
-        model_output = model(model_input, class_cond)
+        labels = labels.to(device)
+        model_output = model(model_input, labels)
         loss = loss_op(model_input, model_output)
         loss_tracker.update(loss.item()/deno)
 
-        
-        if epoch % 25 == 0:  # Calculate accuracy only every 25 epochs
-            _, predicted = torch.max(model_output, 1)  # Get predicted class
-            correct += (predicted == labels).sum().item()
+        # Calculate accuracy
+        with torch.no_grad():
+            # For PixelCNN, we need to sample from the model to get predictions
+            # This is a simplified version - you might want to adjust based on your needs
+            predicted = torch.argmax(model_output, dim=1)
             total += labels.size(0)
-        
+            correct += (predicted == labels).sum().item()
+    
         if mode == 'training':
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             
-    if epoch % 25 == 0 and total > 0:  # Log accuracy only every 50 epochs
-        accuracy = 100. * correct / total
-        if args.en_wandb:
-            wandb.log({f"{mode}_accuracy": accuracy, f"{mode}_loss": loss_tracker.get_mean(), "epoch": epoch})
-        print(f"{mode.capitalize()} Accuracy (Epoch {epoch}): {accuracy:.2f}%")
-
+    accuracy = 100 * correct / total if total > 0 else 0
+    
     if args.en_wandb:
         wandb.log({mode + "-Average-BPD" : loss_tracker.get_mean()})
         wandb.log({mode + "-epoch": epoch})
+        wandb.log({mode + "-accuracy": accuracy})
+        
+    return accuracy
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -207,7 +209,7 @@ if __name__ == '__main__':
     scheduler = lr_scheduler.StepLR(optimizer, step_size=1, gamma=args.lr_decay)
     
     for epoch in tqdm(range(args.max_epochs)):
-        train_or_test(model = model, 
+        train_accuracy = train_or_test(model = model, 
                       data_loader = train_loader, 
                       optimizer = optimizer, 
                       loss_op = loss_op, 
@@ -218,16 +220,8 @@ if __name__ == '__main__':
         
         # decrease learning rate
         scheduler.step()
-        # train_or_test(model = model,
-        #               data_loader = test_loader,
-        #               optimizer = optimizer,
-        #               loss_op = loss_op,
-        #               device = device,
-        #               args = args,
-        #               epoch = epoch,
-        #               mode = 'test')
         
-        train_or_test(model = model,
+        val_accuracy = train_or_test(model = model,
                       data_loader = val_loader,
                       optimizer = optimizer,
                       loss_op = loss_op,
@@ -235,6 +229,10 @@ if __name__ == '__main__':
                       args = args,
                       epoch = epoch,
                       mode = 'val')
+        
+        # Log accuracy every 25 epochs
+        if epoch % 25 == 0:
+            print(f'Epoch {epoch}: Train Accuracy: {train_accuracy:.2f}%, Val Accuracy: {val_accuracy:.2f}%')
         
         if epoch % args.sampling_interval == 0:
             print('......sampling......')
