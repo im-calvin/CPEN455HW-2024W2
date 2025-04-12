@@ -138,6 +138,28 @@ class PixelCNN(nn.Module):
         self.right_shift_pad = nn.ZeroPad2d((1, 0, 0, 0))
         self.down_shift_pad = nn.ZeroPad2d((0, 0, 1, 0))
 
+        # Enhanced class conditioning
+        self.embedding = nn.Embedding(self.NUM_CLASSES, self.nr_filters)
+        self.emb_linear = nn.Sequential(
+            nn.Linear(self.nr_filters, self.nr_filters),
+            nn.ELU(),
+            nn.Linear(self.nr_filters, self.nr_filters)
+        )
+        
+        # Middle fusion layers
+        self.middle_fusion = nn.Sequential(
+            nn.Linear(self.nr_filters, self.nr_filters),
+            nn.ELU(),
+            nn.Linear(self.nr_filters, self.nr_filters)
+        )
+        
+        # Late fusion layers
+        self.late_fusion = nn.Sequential(
+            nn.Linear(self.nr_filters, self.nr_filters),
+            nn.ELU(),
+            nn.Linear(self.nr_filters, self.nr_filters)
+        )
+
         down_nr_resnet = [nr_resnet] + [nr_resnet + 1] * 2
         self.down_layers = nn.ModuleList(
             [
@@ -208,23 +230,8 @@ class PixelCNN(nn.Module):
         self.nin_out = nin(nr_filters, num_mix * nr_logistic_mix)
         self.init_padding = None
 
-        # Early fusion - embedding layer for class conditioning
-        self.embedding = nn.Embedding(self.NUM_CLASSES, nr_filters)
-        self.emb_linear = nn.Linear(nr_filters, nr_filters)
-
-        # Middle fusion - additional layers for class conditioning
-        self.middle_fusion = nn.ModuleList(
-            [
-                nn.Linear(nr_filters, nr_filters),
-                nn.Linear(nr_filters, nr_filters),
-            ]
-        )
-
-        # Late fusion - final layer for class conditioning
-        self.late_fusion = nn.Linear(nr_filters, nr_filters)
-
     def forward(self, x, class_cond, sample=False):
-        # Early fusion - embed class label and add to input
+        # Enhanced early fusion with deeper embedding
         label_embeddings = self.embedding(class_cond.to(x.device))
         label_embeddings = self.emb_linear(label_embeddings)
         label_embeddings = label_embeddings.unsqueeze(-1).unsqueeze(-1)
@@ -246,7 +253,7 @@ class PixelCNN(nn.Module):
         u_list = [self.u_init(x)]
         ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
 
-        # Middle fusion - add class conditioning after each up layer
+        # Enhanced middle fusion with multiple conditioning points
         for i in range(3):
             # resnet block
             u_out, ul_out = self.up_layers[i](u_list[-1], ul_list[-1])
@@ -258,12 +265,9 @@ class PixelCNN(nn.Module):
                 u_list += [self.downsize_u_stream[i](u_list[-1])]
                 ul_list += [self.downsize_ul_stream[i](ul_list[-1])]
 
-            # Middle fusion - add class conditioning
-            if i == 1:  # Add in middle layer
-                mid_emb = self.middle_fusion[0](
-                    label_embeddings.squeeze(-1).squeeze(-1)
-                )
-                mid_emb = self.middle_fusion[1](mid_emb)
+            # Middle fusion - add class conditioning at multiple points
+            if i in [0, 1]:  # Add in multiple layers
+                mid_emb = self.middle_fusion(label_embeddings.squeeze(-1).squeeze(-1))
                 mid_emb = mid_emb.unsqueeze(-1).unsqueeze(-1)
                 self.add_embedding_to_u_ul(u_list, mid_emb)
                 self.add_embedding_to_u_ul(ul_list, mid_emb)
@@ -285,8 +289,8 @@ class PixelCNN(nn.Module):
                 u = self.upsize_u_stream[i](u)
                 ul = self.upsize_ul_stream[i](ul)
 
-            # Late fusion - add class conditioning at the end
-            if i == 2:  # Add in final layer
+            # Enhanced late fusion
+            if i in [1, 2]:  # Add in multiple layers
                 late_emb = self.late_fusion(label_embeddings.squeeze(-1).squeeze(-1))
                 late_emb = late_emb.unsqueeze(-1).unsqueeze(-1)
                 u += late_emb
