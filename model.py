@@ -292,8 +292,8 @@ class PixelCNN(nn.Module):
         label_embeddings = label_embeddings.unsqueeze(-1).unsqueeze(-1)
         
         # Debug embedding shapes
-        if not sample:
-            print(f"Label embeddings shape: {label_embeddings.shape}")
+        # if not sample:
+            # print(f"Label embeddings shape: {label_embeddings.shape}")
 
         # similar as done in the tf repo :
         if self.init_padding is not sample:
