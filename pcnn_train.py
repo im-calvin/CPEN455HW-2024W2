@@ -25,20 +25,25 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
     loss_tracker = mean_tracker()
     correct = 0
     total = 0
+    batch_losses = []
 
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, _, labels = item
+        model_input, categories, _ = item  # Changed to match evaluation code
         model_input = model_input.to(device)
-        labels = labels.to(device)
+        original_label = [my_bidict[item] for item in categories]  # Convert categories to labels
+        original_label = torch.tensor(original_label, dtype=torch.int64).to(device)
         
         if mode == 'training':
             # During training, we only compute loss for the true labels
-            model_output = model(model_input, labels)
+            model_output = model(model_input, original_label)  # Use original_label instead of labels
             loss = loss_op(model_input, model_output)
             loss_tracker.update(loss.item()/deno)
+            batch_losses.append(loss.item()/deno)
             
             optimizer.zero_grad()
             loss.backward()
+            # Add gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
         else:
             # During evaluation, we need to try all possible class labels
@@ -55,12 +60,13 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
                 
                 # Get predictions and update accuracy
                 predicted = torch.argmin(class_losses, dim=0)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                total += original_label.size(0)
+                correct += (predicted == original_label).sum().item()
                 
                 # Update loss tracker with the loss for true labels
-                true_label_losses = torch.gather(class_losses, 0, labels.unsqueeze(0))[0]
+                true_label_losses = torch.gather(class_losses, 0, original_label.unsqueeze(0))[0]
                 loss_tracker.update(true_label_losses.mean().item()/deno)
+                batch_losses.append(true_label_losses.mean().item()/deno)
     
     accuracy = 100 * correct / total if total > 0 else 0
     
@@ -68,8 +74,10 @@ def train_or_test(model, data_loader, optimizer, loss_op, device, args, epoch, m
         wandb.log({mode + "-Average-BPD" : loss_tracker.get_mean()})
         wandb.log({mode + "-epoch": epoch})
         wandb.log({mode + "-accuracy": accuracy})
+        # Log batch losses
+        wandb.log({mode + "-batch_losses": wandb.Histogram(batch_losses)})
         
-    return accuracy
+    return accuracy, loss_tracker.get_mean()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -99,17 +107,17 @@ if __name__ == '__main__':
                         help='Observation shape')
     
     # model
-    parser.add_argument('-q', '--nr_resnet', type=int, default=1,
+    parser.add_argument('-q', '--nr_resnet', type=int, default=5,
                         help='Number of residual blocks per stage of the model')
-    parser.add_argument('-n', '--nr_filters', type=int, default=40,
+    parser.add_argument('-n', '--nr_filters', type=int, default=160,
                         help='Number of filters to use across the model. Higher = larger model.')
-    parser.add_argument('-m', '--nr_logistic_mix', type=int, default=5,
+    parser.add_argument('-m', '--nr_logistic_mix', type=int, default=10,
                         help='Number of logistic components in the mixture. Higher = more flexible model')
     parser.add_argument('-l', '--lr', type=float,
-                        default=0.0002, help='Base learning rate')
+                        default=0.0001, help='Base learning rate')
     parser.add_argument('-e', '--lr_decay', type=float, default=0.999995,
                         help='Learning rate decay, applied every step of the optimization')
-    parser.add_argument('-b', '--batch_size', type=int, default=64,
+    parser.add_argument('-b', '--batch_size', type=int, default=32,
                         help='Batch size during training per GPU')
     parser.add_argument('-sb', '--sample_batch_size', type=int, default=32,
                         help='Batch size during sampling per GPU')
@@ -228,11 +236,17 @@ if __name__ == '__main__':
         model.load_state_dict(torch.load(args.load_params))
         print('model parameters loaded')
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=1, gamma=args.lr_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5, betas=(0.9, 0.999))
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, verbose=True, min_lr=1e-6)
+    
+    # Add early stopping parameters
+    best_val_accuracy = 0
+    patience = 15  # Increased patience
+    patience_counter = 0
+    best_epoch = 0
     
     for epoch in tqdm(range(args.max_epochs)):
-        train_accuracy = train_or_test(model = model, 
+        train_accuracy, train_loss = train_or_test(model = model, 
                       data_loader = train_loader, 
                       optimizer = optimizer, 
                       loss_op = loss_op, 
@@ -241,10 +255,7 @@ if __name__ == '__main__':
                       epoch = epoch, 
                       mode = 'training')
         
-        # decrease learning rate
-        scheduler.step()
-        
-        val_accuracy = train_or_test(model = model,
+        val_accuracy, val_loss = train_or_test(model = model,
                       data_loader = val_loader,
                       optimizer = optimizer,
                       loss_op = loss_op,
@@ -253,9 +264,31 @@ if __name__ == '__main__':
                       epoch = epoch,
                       mode = 'val')
         
-        # Log accuracy every 25 epochs
-        if epoch % 25 == 0:
-            print(f'Epoch {epoch}: Train Accuracy: {train_accuracy:.2f}%, Val Accuracy: {val_accuracy:.2f}%')
+        # Update learning rate based on validation accuracy
+        scheduler.step(val_accuracy)
+        
+        # Log accuracy and loss every epoch
+        print(f'Epoch {epoch}:')
+        print(f'Train - Accuracy: {train_accuracy:.2f}%, Loss: {train_loss:.4f}')
+        print(f'Val - Accuracy: {val_accuracy:.2f}%, Loss: {val_loss:.4f}')
+        
+        # Save best model
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_epoch = epoch
+            patience_counter = 0
+            if not os.path.exists("models"):
+                os.makedirs("models")
+            torch.save(model.state_dict(), 'models/best_{}_{}.pth'.format(model_name, epoch))
+            print(f'New best model saved with validation accuracy: {val_accuracy:.2f}%')
+        else:
+            patience_counter += 1
+            
+        # Early stopping
+        if patience_counter >= patience:
+            print(f'Early stopping triggered after {patience} epochs without improvement')
+            print(f'Best validation accuracy: {best_val_accuracy:.2f}% at epoch {best_epoch}')
+            break
         
         if epoch % args.sampling_interval == 0:
             print('......sampling......')

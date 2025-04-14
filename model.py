@@ -119,7 +119,7 @@ class PixelCNN(nn.Module):
     def __init__(
         self,
         nr_resnet=5,
-        nr_filters=80,
+        nr_filters=160,
         nr_logistic_mix=10,
         resnet_nonlinearity="concat_elu",
         input_channels=3,
@@ -138,27 +138,54 @@ class PixelCNN(nn.Module):
         self.right_shift_pad = nn.ZeroPad2d((1, 0, 0, 0))
         self.down_shift_pad = nn.ZeroPad2d((0, 0, 1, 0))
 
-        # Enhanced class conditioning
+        # Enhanced class conditioning with batch norm
         self.embedding = nn.Embedding(self.NUM_CLASSES, self.nr_filters)
+        # Initialize embedding with small values
+        nn.init.normal_(self.embedding.weight, mean=0.0, std=0.01)
+        
         self.emb_linear = nn.Sequential(
             nn.Linear(self.nr_filters, self.nr_filters),
+            nn.BatchNorm1d(self.nr_filters),
             nn.ELU(),
-            nn.Linear(self.nr_filters, self.nr_filters)
+            nn.Linear(self.nr_filters, self.nr_filters),
+            nn.BatchNorm1d(self.nr_filters)
         )
         
-        # Middle fusion layers
+        # Initialize linear layers with proper scaling
+        for m in self.emb_linear.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+                nn.init.zeros_(m.bias)
+        
+        # Middle fusion layers with batch norm
         self.middle_fusion = nn.Sequential(
             nn.Linear(self.nr_filters, self.nr_filters),
+            nn.BatchNorm1d(self.nr_filters),
             nn.ELU(),
-            nn.Linear(self.nr_filters, self.nr_filters)
+            nn.Linear(self.nr_filters, self.nr_filters),
+            nn.BatchNorm1d(self.nr_filters)
         )
         
-        # Late fusion layers
+        # Initialize middle fusion layers
+        for m in self.middle_fusion.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+                nn.init.zeros_(m.bias)
+        
+        # Late fusion layers with batch norm
         self.late_fusion = nn.Sequential(
             nn.Linear(self.nr_filters, self.nr_filters),
+            nn.BatchNorm1d(self.nr_filters),
             nn.ELU(),
-            nn.Linear(self.nr_filters, self.nr_filters)
+            nn.Linear(self.nr_filters, self.nr_filters),
+            nn.BatchNorm1d(self.nr_filters)
         )
+        
+        # Initialize late fusion layers
+        for m in self.late_fusion.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+                nn.init.zeros_(m.bias)
 
         down_nr_resnet = [nr_resnet] + [nr_resnet + 1] * 2
         self.down_layers = nn.ModuleList(
@@ -179,62 +206,94 @@ class PixelCNN(nn.Module):
 
         self.downsize_u_stream = nn.ModuleList(
             [
-                down_shifted_conv2d(nr_filters, nr_filters, stride=(2, 2))
+                nn.Sequential(
+                    down_shifted_conv2d(nr_filters, nr_filters, stride=(2, 2)),
+                    nn.BatchNorm2d(nr_filters)
+                )
                 for _ in range(2)
             ]
         )
 
         self.downsize_ul_stream = nn.ModuleList(
             [
-                down_right_shifted_conv2d(nr_filters, nr_filters, stride=(2, 2))
+                nn.Sequential(
+                    down_right_shifted_conv2d(nr_filters, nr_filters, stride=(2, 2)),
+                    nn.BatchNorm2d(nr_filters)
+                )
                 for _ in range(2)
             ]
         )
 
         self.upsize_u_stream = nn.ModuleList(
             [
-                down_shifted_deconv2d(nr_filters, nr_filters, stride=(2, 2))
+                nn.Sequential(
+                    down_shifted_deconv2d(nr_filters, nr_filters, stride=(2, 2)),
+                    nn.BatchNorm2d(nr_filters)
+                )
                 for _ in range(2)
             ]
         )
 
         self.upsize_ul_stream = nn.ModuleList(
             [
-                down_right_shifted_deconv2d(nr_filters, nr_filters, stride=(2, 2))
+                nn.Sequential(
+                    down_right_shifted_deconv2d(nr_filters, nr_filters, stride=(2, 2)),
+                    nn.BatchNorm2d(nr_filters)
+                )
                 for _ in range(2)
             ]
         )
 
-        self.u_init = down_shifted_conv2d(
-            input_channels + 1, nr_filters, filter_size=(2, 3), shift_output_down=True
+        self.u_init = nn.Sequential(
+            down_shifted_conv2d(
+                input_channels + 1, nr_filters, filter_size=(2, 3), shift_output_down=True
+            ),
+            nn.BatchNorm2d(nr_filters)
         )
 
         self.ul_init = nn.ModuleList(
             [
-                down_shifted_conv2d(
-                    input_channels + 1,
-                    nr_filters,
-                    filter_size=(1, 3),
-                    shift_output_down=True,
+                nn.Sequential(
+                    down_shifted_conv2d(
+                        input_channels + 1,
+                        nr_filters,
+                        filter_size=(1, 3),
+                        shift_output_down=True,
+                    ),
+                    nn.BatchNorm2d(nr_filters)
                 ),
-                down_right_shifted_conv2d(
-                    input_channels + 1,
-                    nr_filters,
-                    filter_size=(2, 1),
-                    shift_output_right=True,
+                nn.Sequential(
+                    down_right_shifted_conv2d(
+                        input_channels + 1,
+                        nr_filters,
+                        filter_size=(2, 1),
+                        shift_output_right=True,
+                    ),
+                    nn.BatchNorm2d(nr_filters)
                 ),
             ]
         )
 
         num_mix = 3 if self.input_channels == 1 else 10
-        self.nin_out = nin(nr_filters, num_mix * nr_logistic_mix)
+        self.nin_out = nn.Sequential(
+            nin(nr_filters, num_mix * nr_logistic_mix),
+            nn.BatchNorm2d(num_mix * nr_logistic_mix)
+        )
         self.init_padding = None
 
     def forward(self, x, class_cond, sample=False):
+        # Debug input shapes
+        if not sample:
+            print(f"Input shape: {x.shape}, Class cond shape: {class_cond.shape}")
+        
         # Enhanced early fusion with deeper embedding
         label_embeddings = self.embedding(class_cond.to(x.device))
         label_embeddings = self.emb_linear(label_embeddings)
         label_embeddings = label_embeddings.unsqueeze(-1).unsqueeze(-1)
+        
+        # Debug embedding shapes
+        if not sample:
+            print(f"Label embeddings shape: {label_embeddings.shape}")
 
         # similar as done in the tf repo :
         if self.init_padding is not sample:
@@ -252,6 +311,10 @@ class PixelCNN(nn.Module):
         x = x if sample else torch.cat((x, self.init_padding), 1)
         u_list = [self.u_init(x)]
         ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
+
+        # Debug initial shapes
+        if not sample:
+            print(f"Initial u shape: {u_list[-1].shape}, ul shape: {ul_list[-1].shape}")
 
         # Enhanced middle fusion with multiple conditioning points
         for i in range(3):
@@ -297,6 +360,10 @@ class PixelCNN(nn.Module):
                 ul += late_emb
 
         x_out = self.nin_out(F.elu(ul))
+
+        # Debug output shape
+        if not sample:
+            print(f"Output shape: {x_out.shape}")
 
         assert len(u_list) == len(ul_list) == 0, pdb.set_trace()
 
