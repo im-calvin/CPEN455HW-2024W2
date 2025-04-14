@@ -283,8 +283,8 @@ class PixelCNN(nn.Module):
 
     def forward(self, x, class_cond, sample=False):
         # Debug input shapes
-        if not sample:
-            print(f"Input shape: {x.shape}, Class cond shape: {class_cond.shape}")
+        # if not sample:
+            # print(f"Input shape: {x.shape}, Class cond shape: {class_cond.shape}")
         
         # Enhanced early fusion with deeper embedding
         label_embeddings = self.embedding(class_cond.to(x.device))
@@ -313,8 +313,8 @@ class PixelCNN(nn.Module):
         ul_list = [self.ul_init[0](x) + self.ul_init[1](x)]
 
         # Debug initial shapes
-        if not sample:
-            print(f"Initial u shape: {u_list[-1].shape}, ul shape: {ul_list[-1].shape}")
+        # if not sample:
+            # print(f"Initial u shape: {u_list[-1].shape}, ul shape: {ul_list[-1].shape}")
 
         # Enhanced middle fusion with multiple conditioning points
         for i in range(3):
@@ -362,8 +362,8 @@ class PixelCNN(nn.Module):
         x_out = self.nin_out(F.elu(ul))
 
         # Debug output shape
-        if not sample:
-            print(f"Output shape: {x_out.shape}")
+        # if not sample:
+            # print(f"Output shape: {x_out.shape}")
 
         assert len(u_list) == len(ul_list) == 0, pdb.set_trace()
 
