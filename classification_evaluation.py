@@ -62,7 +62,7 @@ def classifier(model, data_loader, device):
     model.eval()
     acc_tracker = ratio_tracker()
     for batch_idx, item in enumerate(tqdm(data_loader)):
-        model_input, categories, _  = item
+        model_input, categories, _ = item
         model_input = model_input.to(device)
         original_label = [my_bidict[item] for item in categories]
         original_label = torch.tensor(original_label, dtype=torch.int64).to(device)
@@ -101,8 +101,8 @@ if __name__ == "__main__":
 
     # TODO:Begin of your code
     model = PixelCNN(
-        nr_resnet=1,
-        nr_filters=40,
+        nr_resnet=5,
+        nr_filters=160,
         input_channels=3,
         nr_logistic_mix=10,
     ).to(device)
@@ -115,7 +115,8 @@ if __name__ == "__main__":
         os.path.dirname(__file__), "models/conditional_pixelcnn.pth"
     )
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path))
+        map_location = torch.device("cpu")
+        model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
         print("model parameters loaded")
     else:
         raise FileNotFoundError(f"Model file not found at {model_path}")

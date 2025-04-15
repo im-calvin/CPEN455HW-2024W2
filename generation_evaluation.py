@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
     #TODO: Begin of your code
     #Load your model and generate images in the gen_data_dir, feel free to modify the model
-    model = PixelCNN(nr_resnet=1, nr_filters=40, input_channels=3, nr_logistic_mix=10)
+    model = PixelCNN(nr_resnet=5, nr_filters=160, input_channels=3, nr_logistic_mix=10)
     model = model.to(device)
     model = model.eval()
     
